@@ -6,7 +6,8 @@
 > trước khi về app, nên mọi thay đổi **phải giữ nguyên 4 điều kiện**:
 >
 > 1. **Không lưu và không log:** không ghi token xuống đĩa hay cơ sở dữ liệu; không ghi log token, `code`, `state`, `code_verifier`.
-> 2. **Sống ngắn, dùng một lần:** token chỉ tồn tại tối đa 60 giây và bị xóa ngay lần đổi đầu tiên (kể cả khi `code_verifier` sai).
+> 2. **Sống ngắn, dùng một lần:** BFF tự dọn token khỏi kho RAM khi hết 60 giây, kể cả khi không có request tiếp theo.
+>    Lần đổi hợp lệ về định dạng sẽ lấy mã ra khỏi kho ngay, kể cả khi `code_verifier` sai.
 > 3. **Không chuyển tiếp `refresh_token`** cho app.
 > 4. **Chỉ dùng cho LinkedIn.** Facebook vẫn dùng Meta SDK trên app, không đi qua BFF.
 >
@@ -41,7 +42,7 @@ Redirect URL phải đăng ký ở LinkedIn Developer Portal (tab Auth của App
 
 ## Chạy và test
 ```bash
-npm test                # 32 test, LinkedIn được giả lập, không cần mạng
+npm test                # LinkedIn được giả lập, không cần mạng
 cp .env.example .env    # điền giá trị thật (không commit)
 npm run start:local     # node --env-file=.env src/server.js
 # hoặc đặt biến môi trường rồi: npm start

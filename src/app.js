@@ -36,6 +36,10 @@ const CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const VERIFIER_PATTERN = /^[A-Za-z0-9._~-]{43,128}$/;
 const EXCHANGE_CODE_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
 
+function matchesString(value, pattern) {
+  return typeof value === 'string' && pattern.test(value);
+}
+
 function sha256Base64Url(value) {
   return crypto.createHash('sha256').update(value, 'ascii').digest('base64url');
 }
@@ -96,7 +100,11 @@ class ExpiringStore {
   put(key, value) {
     this.sweep();
     if (this.items.size >= MAX_PENDING) return false;
-    this.items.set(key, { value, expiresAt: this.now() + this.ttlMs });
+    clearTimeout(this.items.get(key)?.timer);
+    const expiresAt = this.now() + this.ttlMs;
+    // Dọn mục hết hạn ngay cả khi không có request tiếp theo.
+    const timer = setTimeout(() => this.items.delete(key), this.ttlMs).unref();
+    this.items.set(key, { value, expiresAt, timer });
     return true;
   }
 
@@ -109,6 +117,7 @@ class ExpiringStore {
   take(key) {
     const entry = this.items.get(key);
     if (!entry) return null;
+    clearTimeout(entry.timer);
     this.items.delete(key);
     return entry.expiresAt > this.now() ? entry.value : null;
   }
@@ -126,7 +135,10 @@ class ExpiringStore {
   sweep() {
     const t = this.now();
     for (const [key, entry] of this.items) {
-      if (entry.expiresAt <= t) this.items.delete(key);
+      if (entry.expiresAt <= t) {
+        clearTimeout(entry.timer);
+        this.items.delete(key);
+      }
     }
   }
 }
@@ -256,7 +268,7 @@ function createApp({ config, fetchImpl = globalThis.fetch, now = Date.now, rando
     } catch (error) {
       return sendJson(res, error.message === 'too-large' ? 413 : 400, { error: 'invalid_request' });
     }
-    if (!STATE_PATTERN.test(String(body.state)) || !CHALLENGE_PATTERN.test(String(body.code_challenge))) {
+    if (!matchesString(body.state, STATE_PATTERN) || !matchesString(body.code_challenge, CHALLENGE_PATTERN)) {
       return sendJson(res, 400, { error: 'invalid_request' });
     }
     // State đã có phiên đang chờ thì từ chối, không ghi đè challenge của phiên cũ.
@@ -343,9 +355,9 @@ function createApp({ config, fetchImpl = globalThis.fetch, now = Date.now, rando
     }
     const { exchange_code: exchangeCode, state, code_verifier: verifier } = body;
     if (
-      !EXCHANGE_CODE_PATTERN.test(String(exchangeCode)) ||
-      !STATE_PATTERN.test(String(state)) ||
-      !VERIFIER_PATTERN.test(String(verifier))
+      !matchesString(exchangeCode, EXCHANGE_CODE_PATTERN) ||
+      !matchesString(state, STATE_PATTERN) ||
+      !matchesString(verifier, VERIFIER_PATTERN)
     ) {
       return sendJson(res, 400, { error: 'invalid_request' });
     }
@@ -373,4 +385,4 @@ function createApp({ config, fetchImpl = globalThis.fetch, now = Date.now, rando
   };
 }
 
-module.exports = { createApp, RateLimiter, rateKey, MAX_PENDING, MAX_PENDING_PER_IP, MAX_TRACKED_IPS, START_LIMIT_PER_MINUTE, TOKEN_LIMIT_PER_MINUTE, UPSTREAM_TIMEOUT_MS, sha256Base64Url, EXCHANGE_TTL_MS, AUTHORIZATION_TTL_MS, LINKEDIN_TOKEN_ENDPOINT };
+module.exports = { createApp, ExpiringStore, RateLimiter, rateKey, MAX_PENDING, MAX_PENDING_PER_IP, MAX_TRACKED_IPS, START_LIMIT_PER_MINUTE, TOKEN_LIMIT_PER_MINUTE, UPSTREAM_TIMEOUT_MS, sha256Base64Url, EXCHANGE_TTL_MS, AUTHORIZATION_TTL_MS, LINKEDIN_TOKEN_ENDPOINT };

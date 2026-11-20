@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { createApp, sha256Base64Url, EXCHANGE_TTL_MS, LINKEDIN_TOKEN_ENDPOINT } = require('../src/app');
+const { createApp, ExpiringStore, sha256Base64Url, EXCHANGE_TTL_MS, LINKEDIN_TOKEN_ENDPOINT } = require('../src/app');
 
 const SECRET = 'bi-mat-cua-server-khong-duoc-lo';
 const APP_REDIRECT = 'com.lttbdd.socialagent://oauth/linkedin/callback';
@@ -220,6 +220,17 @@ test('sai state ở bước token bị từ chối', async () => {
   }
 });
 
+test('kho tự xóa token đúng hạn khi không có request tiếp theo', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const store = new ExpiringStore(Date.now, EXCHANGE_TTL_MS);
+  assert.ok(store.put('exchange', { token: 'token_gia' }));
+
+  t.mock.timers.tick(EXCHANGE_TTL_MS - 1);
+  assert.equal(store.items.size, 1);
+  t.mock.timers.tick(1);
+  assert.equal(store.items.size, 0);
+});
+
 test('exchange_code hết hạn sau 60 giây', async () => {
   const ctx = await setup();
   try {
@@ -239,6 +250,8 @@ test('start từ chối dữ liệu sai định dạng', async () => {
       { state: 'ngan', code_challenge: CHALLENGE },
       { state: STATE, code_challenge: 'khong-phai-sha256' },
       { state: STATE },
+      { state: [STATE], code_challenge: CHALLENGE },
+      { state: STATE, code_challenge: [CHALLENGE] },
       {},
       [],
     ];
@@ -259,6 +272,22 @@ test('token từ chối trường thiếu hoặc sai định dạng', async () =
     for (const body of [{}, { exchange_code: 'ngan', state: STATE, code_verifier: VERIFIER }, { exchange_code: 'a'.repeat(43), state: STATE }]) {
       assert.equal((await ctx.post('/auth/linkedin/token', body)).status, 400);
     }
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('token từ chối trường sai kiểu trước khi lấy mã khỏi kho', async () => {
+  const ctx = await setup();
+  try {
+    const exchangeCode = await getExchangeCode(ctx);
+    const body = { exchange_code: exchangeCode, state: STATE, code_verifier: VERIFIER };
+    for (const key of Object.keys(body)) {
+      const invalid = await ctx.post('/auth/linkedin/token', { ...body, [key]: [body[key]] });
+      assert.equal(invalid.status, 400);
+      assert.deepEqual(await invalid.json(), { error: 'invalid_request' });
+    }
+    assert.equal((await ctx.post('/auth/linkedin/token', body)).status, 200);
   } finally {
     await ctx.close();
   }
