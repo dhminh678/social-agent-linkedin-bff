@@ -1,7 +1,21 @@
 # LinkedIn BFF (Social Agent)
 
+> ## Ngoại lệ Quy tắc 5 — đọc trước khi sửa code
+> Dịch vụ này tồn tại theo **ngoại lệ của Quy tắc 5** trong `AGENTS.md` của repo app, đã được nhóm duyệt ở
+> [issue #88](https://github.com/Bthangnguyen/Mobile-Project-/issues/88). Access token LinkedIn đi qua bộ nhớ của BFF
+> trước khi về app, nên mọi thay đổi **phải giữ nguyên 4 điều kiện**:
+>
+> 1. **Không lưu và không log:** không ghi token xuống đĩa hay cơ sở dữ liệu; không ghi log token, `code`, `state`, `code_verifier`.
+> 2. **Sống ngắn, dùng một lần:** token chỉ tồn tại tối đa 60 giây và bị xóa ngay lần đổi đầu tiên (kể cả khi `code_verifier` sai).
+> 3. **Không chuyển tiếp `refresh_token`** cho app.
+> 4. **Chỉ dùng cho LinkedIn.** Facebook vẫn dùng Meta SDK trên app, không đi qua BFF.
+>
+> Mở rộng sang nhà cung cấp khác hoặc luồng khác (lưu token, làm mới token, logout) cần issue `contract` mới ở repo app
+> và sự đồng ý của nhóm. `client_secret` và tài khoản hosting do Minh giữ; secret chỉ nằm trong
+> biến môi trường của hosting, không commit.
+
 BFF tối giản cho đăng nhập LinkedIn (Standard OAuth 2.0). `client_secret` chỉ nằm ở máy chủ này, không nằm trong APK.
-Thiết kế: `docs/research-social-api.md` (Luồng B). Không có dependency; cần Node.js 22 trở lên (đặt `NODE_VERSION=22` trên Render, trùng với CI).
+Thiết kế: `docs/research-social-api.md` (Luồng B) trong repo app. Không có dependency; cần Node.js 22 trở lên (đặt `NODE_VERSION=22` trên Render, trùng với CI).
 
 ## Endpoint
 | Method | Đường dẫn | Việc |
